@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
+
 	"github.com/containrrr/shoutrrr/pkg/format"
 	"github.com/containrrr/shoutrrr/pkg/services/standard"
 	"github.com/containrrr/shoutrrr/pkg/types"
 	"github.com/containrrr/shoutrrr/pkg/util"
-	"net/http"
-	"net/url"
 )
 
 // Service providing Discord as a notification service
@@ -33,14 +34,23 @@ const (
 
 // Send a notification message to discord
 func (service *Service) Send(message string, params *types.Params) error {
+	var firstErr error
 
 	if service.config.JSON {
 		postURL := CreateAPIURLFromConfig(service.config)
 		return doSend([]byte(message), postURL)
 	}
 
-	items, omitted := CreateItemsFromPlain(message, service.config.SplitLines)
-	return service.sendItems(items, params, omitted)
+	batches, omitted := CreateItemsFromPlain(message, service.config.SplitLines)
+	for _, items := range batches {
+		if err := service.sendItems(items, params, omitted); err != nil {
+			service.Log(err)
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+	return firstErr
 }
 
 // SendItems sends items with additional meta data and richer appearance
@@ -76,12 +86,14 @@ func (service *Service) sendItems(items []types.MessageItem, params *types.Param
 }
 
 // CreateItemsFromPlain creates a set of MessageItems that is compatible with Discords webhook payload
-func CreateItemsFromPlain(plain string, splitLines bool) (items []types.MessageItem, omitted int) {
+func CreateItemsFromPlain(plain string, splitLines bool) (batches [][]types.MessageItem, omitted int) {
 	if splitLines {
-		return util.MessageItemsFromLines(plain, limits)
+		return util.MessageItemsFromLines(plain, limits), 0
 	}
 
-	return util.PartitionMessage(plain, limits, maxSearchRunes)
+	items, omitted := util.PartitionMessage(plain, limits, maxSearchRunes)
+
+	return [][]types.MessageItem{items}, omitted
 }
 
 // Initialize loads ServiceConfig from configURL and sets logger for this Service

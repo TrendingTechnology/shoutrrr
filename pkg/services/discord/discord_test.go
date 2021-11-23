@@ -1,12 +1,13 @@
 package discord_test
 
 import (
+	"log"
+	"time"
+
 	. "github.com/containrrr/shoutrrr/pkg/services/discord"
 	"github.com/containrrr/shoutrrr/pkg/types"
 	"github.com/containrrr/shoutrrr/pkg/util"
 	"github.com/jarcoal/httpmock"
-	"log"
-	"time"
 
 	"net/url"
 	"os"
@@ -237,7 +238,8 @@ func buildPayloadFromHundreds(hundreds int, split bool, title string, colors [ty
 		builder.WriteString(hundredChars)
 	}
 
-	items, omitted := CreateItemsFromPlain(builder.String(), split)
+	batches, omitted := CreateItemsFromPlain(builder.String(), split)
+	items := batches[0]
 	println("Items:", len(items), "Omitted:", omitted)
 
 	return CreatePayloadFromItems(items, title, colors, omitted)
